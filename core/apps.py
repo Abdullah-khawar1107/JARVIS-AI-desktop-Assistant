@@ -197,60 +197,55 @@ class AppManager:
     # -----------------------------------
 
     def open(self, app_name):
+        app_name = app_name.lower().strip()
 
-    app_name = app_name.lower().strip()
+        # -------------------------
+        # Windows Built-in Apps
+        # -------------------------
 
-    # -------------------------
-    # Windows Built-in Apps
-    # -------------------------
+        if app_name in ["calculator", "calc"]:
+            try:
+                subprocess.Popen("calc.exe", shell=True)
+                return True, "Opening Calculator"
+            except Exception as e:
+                return False, str(e)
 
-    if app_name in ["calculator", "calc"]:
+        if app_name in ["notepad"]:
+            try:
+                subprocess.Popen("notepad.exe", shell=True)
+                return True, "Opening Notepad"
+            except Exception as e:
+                return False, str(e)
 
-        try:
-            subprocess.Popen("calc.exe", shell=True)
-            return True, "Opening Calculator"
-        except Exception as e:
-            return False, str(e)
+        if app_name in ["paint", "mspaint"]:
+            try:
+                subprocess.Popen("mspaint.exe", shell=True)
+                return True, "Opening Paint"
+            except Exception as e:
+                return False, str(e)
 
-    if app_name in ["notepad"]:
+        if app_name in ["command prompt", "cmd"]:
+            try:
+                subprocess.Popen("cmd.exe", shell=True)
+                return True, "Opening Command Prompt"
+            except Exception as e:
+                return False, str(e)
 
-        try:
-            subprocess.Popen("notepad.exe", shell=True)
-            return True, "Opening Notepad"
-        except Exception as e:
-            return False, str(e)
+        # -------------------------
+        # Installed Apps
+        # -------------------------
 
-    if app_name in ["paint", "mspaint"]:
+        path = self.get_path(app_name)
 
-        try:
-            subprocess.Popen("mspaint.exe", shell=True)
-            return True, "Opening Paint"
-        except Exception as e:
-            return False, str(e)
+        if not path:
+            return False, f"I couldn't find {app_name}"
 
-    if app_name in ["command prompt", "cmd"]:
+        ok = self.open_path(path)
 
-        try:
-            subprocess.Popen("cmd.exe", shell=True)
-            return True, "Opening Command Prompt"
-        except Exception as e:
-            return False, str(e)
+        if ok:
+            return True, f"Opening {app_name}"
 
-    # -------------------------
-    # Installed Apps
-    # -------------------------
-
-    path = self.get_path(app_name)
-
-    if not path:
-        return False, f"I couldn't find {app_name}"
-
-    ok = self.open_path(path)
-
-    if ok:
-        return True, f"Opening {app_name}"
-
-    return False, f"Failed to open {app_name}"
+        return False, f"Failed to open {app_name}"
 
     # -----------------------------------
 
