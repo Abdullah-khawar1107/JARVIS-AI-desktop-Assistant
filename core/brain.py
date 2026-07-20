@@ -5,29 +5,44 @@ from core.voice import speak
 from core.wake import WakeListener
 from core.state import StateManager
 from core.conversation import ConversationManager
-from core.apps import open_app
 
 
 class Brain:
 
     def __init__(self):
 
+        # -----------------------------
+        # Settings
+        # -----------------------------
+
         self.voice_enabled = True
 
         self.ui_callback = None
 
+        # -----------------------------
+        # State Manager
+        # -----------------------------
+
         self.state = StateManager()
+
+        # -----------------------------
+        # Wake Listener
+        # -----------------------------
 
         self.wake = WakeListener()
 
+        # -----------------------------
+        # Conversation Manager
+        # -----------------------------
+
         self.conversation = ConversationManager(
-            self.state,
+            state_manager=self.state,
             voice_enabled=self.voice_enabled
         )
 
-    # -----------------------------
-    # UI
-    # -----------------------------
+    # ====================================================
+    # UI CALLBACK
+    # ====================================================
 
     def set_ui_callback(self, callback):
 
@@ -35,9 +50,9 @@ class Brain:
 
         self.conversation.set_ui_callback(callback)
 
-    # -----------------------------
-    # Voice
-    # -----------------------------
+    # ====================================================
+    # VOICE
+    # ====================================================
 
     def set_voice(self, enabled):
 
@@ -45,76 +60,59 @@ class Brain:
 
         self.conversation.set_voice(enabled)
 
-    # -----------------------------
-    # Text Chat
-    # -----------------------------
+    # ====================================================
+    # TEXT CHAT
+    # ====================================================
 
     def ask(self, message):
 
-        message = message.lower()
-
-        if message.startswith("open "):
-
-            app = message.replace("open ", "").strip()
-
-            ok, reply = open_app(app)
-
-            if self.voice_enabled:
-                speak(reply)
-
-            return reply
+        if self.ui_callback:
+            self.ui_callback("You", message)
 
         answer = ask_ai(message)
+
+        if self.ui_callback:
+            self.ui_callback("JARVIS", answer)
 
         if self.voice_enabled:
             speak(answer)
 
         return answer
 
-    # -----------------------------
-    # Start
-    # -----------------------------
+    # ====================================================
+    # START
+    # ====================================================
 
     def start(self):
 
-        self.wake.start(self.on_wake)
+        self.wake.start(
+            self.on_wake
+        )
 
-    # -----------------------------
-    # Wake Callback
-    # -----------------------------
+    # ====================================================
+    # WAKE CALLBACK
+    # ====================================================
 
     def on_wake(self, command):
 
         thread = threading.Thread(
-            target=self._conversation,
+            target=self.run_conversation,
             args=(command,),
             daemon=True
         )
 
         thread.start()
 
-    # -----------------------------
-    # Conversation
-    # -----------------------------
+    # ====================================================
+    # CONVERSATION
+    # ====================================================
 
-    def _conversation(self, command):
+    def run_conversation(self, command):
 
-        if command.lower().startswith("open "):
+        try:
 
-            app = command.replace("open ", "").strip()
+            self.conversation.chat(command)
 
-            ok, reply = open_app(app)
-
-            if self.ui_callback:
-                self.ui_callback("JARVIS", reply)
-
-            if self.voice_enabled:
-                speak(reply)
+        finally:
 
             self.wake.resume()
-
-            return
-
-        self.conversation.chat(command)
-
-        self.wake.resume()
