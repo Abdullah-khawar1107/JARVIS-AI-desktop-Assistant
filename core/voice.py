@@ -1,69 +1,166 @@
+import asyncio
+import os
+import tempfile
 import threading
-import pyttsx3
+
+import edge_tts
+import pygame
 import speech_recognition as sr
 
+# ==========================================
+# Speech Recognition
+# ==========================================
 
-# Create ONE recognizer
 recognizer = sr.Recognizer()
-
-# Create ONE microphone
 microphone = sr.Microphone()
 
-# Voice settings
 recognizer.energy_threshold = 300
 recognizer.dynamic_energy_threshold = True
 
+# ==========================================
+# Audio Player
+# ==========================================
 
-# -----------------------
-# TEXT TO SPEECH
-# -----------------------
+pygame.mixer.init()
 
-def _speak(text):
+_lock = threading.Lock()
+_stop_event = threading.Event()
 
-    engine = pyttsx3.init()
+_current_thread = None
+_current_file = None
 
-    engine.setProperty("rate", 180)
+is_speaking = False
 
-    engine.say(text)
+VOICE = "en-US-GuyNeural"
 
-    engine.runAndWait()
+# ==========================================
+# Edge TTS
+# ==========================================
 
-    engine.stop()
+
+async def _generate(text, filename):
+    communicate = edge_tts.Communicate(
+        text=text,
+        voice=VOICE
+    )
+
+    await communicate.save(filename)
+
+
+# ==========================================
+# Player
+# ==========================================
+
+
+def _player(text):
+
+    global is_speaking
+    global _current_file
+
+    with _lock:
+
+        is_speaking = True
+        _stop_event.clear()
+
+        filename = tempfile.mktemp(".mp3")
+        _current_file = filename
+
+        try:
+
+            asyncio.run(
+                _generate(text, filename)
+            )
+
+            if _stop_event.is_set():
+                return
+
+            pygame.mixer.music.load(filename)
+            pygame.mixer.music.play()
+
+            while pygame.mixer.music.get_busy():
+
+                if _stop_event.is_set():
+
+                    pygame.mixer.music.stop()
+                    break
+
+                pygame.time.wait(50)
+
+        except Exception as e:
+
+            print("Speak Error:", e)
+
+        finally:
+
+            is_speaking = False
+
+            try:
+                pygame.mixer.music.unload()
+            except:
+                pass
+
+            if os.path.exists(filename):
+
+                try:
+                    os.remove(filename)
+                except:
+                    pass
+
+
+# ==========================================
+# Public API
+# ==========================================
 
 
 def speak(text):
 
-    thread = threading.Thread(
-        target=_speak,
-        args=(text,)
+    global _current_thread
+
+    stop_speaking()
+
+    _current_thread = threading.Thread(
+        target=_player,
+        args=(text,),
+        daemon=True
     )
 
-    thread.daemon = True
-
-    thread.start()
+    _current_thread.start()
 
 
-# -----------------------
-# SPEECH TO TEXT
-# -----------------------
+def stop_speaking():
 
-def listen():
+    global is_speaking
+
+    _stop_event.set()
+
+    try:
+        pygame.mixer.music.stop()
+    except:
+        pass
+
+    is_speaking = False
+
+
+def speaking():
+
+    return is_speaking
+
+
+# ==========================================
+# Speech To Text
+# ==========================================
+
+
+def listen(timeout=10, phrase_time_limit=10):
 
     try:
 
         with microphone as source:
 
-            print("Listening...")
-
-            recognizer.adjust_for_ambient_noise(
-                source,
-                duration=0.5
-            )
-
             audio = recognizer.listen(
                 source,
-                timeout=10,
-                phrase_time_limit=10
+                timeout=timeout,
+                phrase_time_limit=phrase_time_limit
             )
 
         text = recognizer.recognize_google(audio)
@@ -72,8 +169,12 @@ def listen():
 
         return text.lower()
 
+    except sr.WaitTimeoutError:
+        return ""
+
+    except sr.UnknownValueError:
+        return ""
+
     except Exception as e:
-
         print("Voice Error:", e)
-
         return ""

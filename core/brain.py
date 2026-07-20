@@ -1,8 +1,11 @@
-from core.ai import ask_ai
-from core.voice import speak, listen
-from core.wake import WakeListener
-
 import threading
+
+from core.ai import ask_ai
+from core.voice import speak
+from core.wake import WakeListener
+from core.state import StateManager
+from core.conversation import ConversationManager
+from core.apps import open_app
 
 
 class Brain:
@@ -13,17 +16,53 @@ class Brain:
 
         self.ui_callback = None
 
+        self.state = StateManager()
+
         self.wake = WakeListener()
+
+        self.conversation = ConversationManager(
+            self.state,
+            voice_enabled=self.voice_enabled
+        )
+
+    # -----------------------------
+    # UI
+    # -----------------------------
 
     def set_ui_callback(self, callback):
 
         self.ui_callback = callback
 
+        self.conversation.set_ui_callback(callback)
+
+    # -----------------------------
+    # Voice
+    # -----------------------------
+
     def set_voice(self, enabled):
 
         self.voice_enabled = enabled
 
+        self.conversation.set_voice(enabled)
+
+    # -----------------------------
+    # Text Chat
+    # -----------------------------
+
     def ask(self, message):
+
+        message = message.lower()
+
+        if message.startswith("open "):
+
+            app = message.replace("open ", "").strip()
+
+            ok, reply = open_app(app)
+
+            if self.voice_enabled:
+                speak(reply)
+
+            return reply
 
         answer = ask_ai(message)
 
@@ -32,51 +71,50 @@ class Brain:
 
         return answer
 
+    # -----------------------------
+    # Start
+    # -----------------------------
+
     def start(self):
 
         self.wake.start(self.on_wake)
 
+    # -----------------------------
+    # Wake Callback
+    # -----------------------------
+
     def on_wake(self, command):
 
         thread = threading.Thread(
-            target=self.process_command,
+            target=self._conversation,
             args=(command,),
             daemon=True
         )
 
         thread.start()
 
-    def process_command(self, command):
+    # -----------------------------
+    # Conversation
+    # -----------------------------
 
-        if command == "":
+    def _conversation(self, command):
 
-            msg = "Yes? I am listening."
+        if command.lower().startswith("open "):
+
+            app = command.replace("open ", "").strip()
+
+            ok, reply = open_app(app)
 
             if self.ui_callback:
-                self.ui_callback("JARVIS", msg)
+                self.ui_callback("JARVIS", reply)
 
             if self.voice_enabled:
-                speak(msg)
+                speak(reply)
 
-            command = listen()
-
-        if command == "":
-
-            self.wake.start(self.on_wake)
+            self.wake.resume()
 
             return
 
-        print("Command:", command)
+        self.conversation.chat(command)
 
-        if self.ui_callback:
-            self.ui_callback("You", command)
-
-        answer = ask_ai(command)
-
-        if self.ui_callback:
-            self.ui_callback("JARVIS", answer)
-
-        if self.voice_enabled:
-            speak(answer)
-
-        self.wake.start(self.on_wake)
+        self.wake.resume()

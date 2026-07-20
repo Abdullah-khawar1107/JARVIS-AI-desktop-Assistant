@@ -6,45 +6,71 @@ class WakeListener:
 
     def __init__(self):
 
-        self.running = False
         self.callback = None
+        self.active = True
+        self.thread = None
+
+    # --------------------------------
+    # Start Once
+    # --------------------------------
 
     def start(self, callback):
 
-        if self.running:
+        self.callback = callback
+
+        if self.thread is not None:
             return
 
-        self.callback = callback
-        self.running = True
-
-        thread = threading.Thread(
-            target=self._listen_loop,
+        self.thread = threading.Thread(
+            target=self._loop,
             daemon=True
         )
 
-        thread.start()
-
-    def stop(self):
-
-        self.running = False
-
-    def _listen_loop(self):
+        self.thread.start()
 
         print("Wake Listener Started")
 
-        while self.running:
+    # --------------------------------
+    # Pause
+    # --------------------------------
 
-            text = listen()
+    def pause(self):
 
-            if not text:
+        self.active = False
+
+    # --------------------------------
+    # Resume
+    # --------------------------------
+
+    def resume(self):
+
+        self.active = True
+
+    # --------------------------------
+    # Main Loop
+    # --------------------------------
+
+    def _loop(self):
+
+        wake_words = [
+            "jarvis",
+            "hey jarvis",
+            "hello jarvis",
+            "hey jar"
+        ]
+
+        while True:
+
+            if not self.active:
                 continue
 
-            wake_words = [
-                "hey jarvis",
-                "jarvis",
-                "hello jarvis",
-                "hey jar"
-            ]
+            text = listen(
+                timeout=5,
+                phrase_time_limit=8
+            )
+
+            if text == "":
+                continue
 
             for word in wake_words:
 
@@ -54,9 +80,9 @@ class WakeListener:
 
                     command = text.replace(word, "").strip()
 
-                    self.stop()
+                    self.pause()
 
                     if self.callback:
                         self.callback(command)
 
-                    return
+                    break
